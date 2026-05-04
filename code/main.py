@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-# 添加模块路径
+# 将当前文件目录加入模块搜索路径，方便导入其他模块
 sys.path.append(str(Path(__file__).parent))
 
 from dotenv import load_dotenv
@@ -20,16 +20,21 @@ from rag_modules import (
     GenerationIntegrationModule
 )
 
-# 加载环境变量
+# 拼接路径，加载环境变量
 load_dotenv(PROJECT_ROOT / ".env")
+# 兜底加载
 load_dotenv()
 
 # 配置日志
 logging.basicConfig(
+    # 设置最低日志级别
     level=logging.INFO,
+    # 设置日志格式，包含时间、模块名、日志级别、日志消息内容
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+# 设置jieba日志级别为WARNING，避免打印详细日志
 logging.getLogger("jieba").setLevel(logging.WARNING)
+# 创建当前模块的日志记录器
 logger = logging.getLogger(__name__)
 
 class RecipeRAGSystem:
@@ -38,21 +43,24 @@ class RecipeRAGSystem:
     def __init__(self, config: RAGConfig = None):
         """
         初始化RAG系统
-
         Args:
             config: RAG系统配置，默认使用DEFAULT_CONFIG
         """
         self.config = config or RAGConfig.from_env()
+        # 数据准备模块
         self.data_module = None
+        # 向量索引模块
         self.index_module = None
+        # 检索模块
         self.retrieval_module = None
+        # 回答生成模块
         self.generation_module = None
 
-        # 检查数据路径
+        # 检查数据路径是否存在
         if not Path(self.config.data_path).exists():
             raise FileNotFoundError(f"数据路径不存在: {self.config.data_path}")
 
-        # 检查API密钥
+        # 在环境变量中检查API密钥是否存在
         if not os.getenv("DASHSCOPE_API_KEY"):
             raise ValueError("请设置 DASHSCOPE_API_KEY 环境变量")
     

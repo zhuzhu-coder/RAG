@@ -10,6 +10,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
+# 创建当前模块的日志记录器
 logger = logging.getLogger(__name__)
 
 class IndexConstructionModule:
@@ -18,7 +19,6 @@ class IndexConstructionModule:
     def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5", index_save_path: str = "./vector_index"):
         """
         初始化索引构建模块
-
         Args:
             model_name: 嵌入模型名称
             index_save_path: 索引保存路径
@@ -35,26 +35,26 @@ class IndexConstructionModule:
         api_key = os.getenv("DASHSCOPE_API_KEY")
         if not api_key:
             raise ValueError("请设置 DASHSCOPE_API_KEY 环境变量")
+        # 创建 embeddings 客户端对象
         self.embeddings = OpenAIEmbeddings(
             model=self.model_name,
             api_key=api_key,
+            # 接口地址
             base_url=os.getenv(
                 "DASHSCOPE_BASE_URL",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
-            dimensions=1024,
-            chunk_size=10,
-            check_embedding_ctx_length=False,
+            dimensions=1024, # 向量维度
+            chunk_size=10, # 一次请求处理的文档块数量
+            check_embedding_ctx_length=False, # 不检查向量上下文长度
         )
         logger.info("嵌入模型初始化完成")
     
     def build_vector_index(self, chunks: List[Document]) -> FAISS:
         """
         构建向量索引
-        
         Args:
             chunks: 文档块列表
-            
         Returns:
             FAISS向量存储对象
         """
@@ -75,7 +75,6 @@ class IndexConstructionModule:
     def add_documents(self, new_chunks: List[Document]):
         """
         向现有索引添加新文档
-        
         Args:
             new_chunks: 新的文档块列表
         """
@@ -95,14 +94,13 @@ class IndexConstructionModule:
 
         # 确保保存目录存在
         Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
-
+        # 保存向量索引到本地目录
         self.vectorstore.save_local(self.index_save_path)
         logger.info(f"向量索引已保存到: {self.index_save_path}")
     
     def load_index(self):
         """
         从配置的路径加载向量索引
-
         Returns:
             加载的向量存储对象，如果加载失败返回None
         """
@@ -114,10 +112,11 @@ class IndexConstructionModule:
             return None
 
         try:
+            # 从本地目录加载向量索引
             self.vectorstore = FAISS.load_local(
                 self.index_save_path,
                 self.embeddings,
-                allow_dangerous_deserialization=True
+                allow_dangerous_deserialization=True # 允许危险反序列化，用于加载本地索引
             )
             logger.info(f"向量索引已从 {self.index_save_path} 加载")
             return self.vectorstore
@@ -128,11 +127,9 @@ class IndexConstructionModule:
     def similarity_search(self, query: str, k: int = 5) -> List[Document]:
         """
         相似度搜索
-        
         Args:
             query: 查询文本
             k: 返回结果数量
-            
         Returns:
             相似文档列表
         """
