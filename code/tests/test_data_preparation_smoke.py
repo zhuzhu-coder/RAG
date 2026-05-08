@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from config import PROJECT_ROOT, RAGConfig
+from langchain_core.documents import Document
 from rag_modules.data_preparation import DataPreparationModule
 
 
@@ -35,4 +36,40 @@ def test_chunk_ids_are_stable_across_loads():
 
     assert [chunk.metadata["chunk_id"] for chunk in first_chunks] == [
         chunk.metadata["chunk_id"] for chunk in second_chunks
+    ]
+
+
+def test_get_parent_documents_prefers_stronger_first_match_over_chunk_count():
+    data_module = DataPreparationModule.__new__(DataPreparationModule)
+    data_module.documents = [
+        Document(
+            page_content="# 番茄炒蛋\n完整菜谱",
+            metadata={"parent_id": "parent-a", "dish_name": "番茄炒蛋"},
+        ),
+        Document(
+            page_content="# 清炒油麦菜\n完整菜谱",
+            metadata={"parent_id": "parent-b", "dish_name": "清炒油麦菜"},
+        ),
+    ]
+
+    retrieved_chunks = [
+        Document(
+            page_content="清炒油麦菜 食材",
+            metadata={"parent_id": "parent-b", "rrf_score": 0.05},
+        ),
+        Document(
+            page_content="番茄炒蛋 食材",
+            metadata={"parent_id": "parent-a", "rrf_score": 0.04},
+        ),
+        Document(
+            page_content="番茄炒蛋 步骤",
+            metadata={"parent_id": "parent-a", "rrf_score": 0.03},
+        ),
+    ]
+
+    parent_docs = data_module.get_parent_documents(retrieved_chunks)
+
+    assert [doc.metadata["dish_name"] for doc in parent_docs] == [
+        "清炒油麦菜",
+        "番茄炒蛋",
     ]

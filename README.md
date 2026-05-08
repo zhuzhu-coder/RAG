@@ -38,7 +38,7 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 RAG_DATA_PATH=data/cook
 RAG_INDEX_SAVE_PATH=vector_index
 RAG_EMBEDDING_MODEL=text-embedding-v4
-RAG_LLM_MODEL=qwen-plus
+RAG_LLM_MODEL=qwen3.5-plus
 RAG_TOP_K=3
 RAG_RETRIEVAL_CANDIDATE_K=10
 RAG_TEMPERATURE=0.1
@@ -68,4 +68,19 @@ python main.py
 ```powershell
 cd E:\RAG\code
 python -m pytest tests -q -p no:cacheprovider
+```
+
+## RAG 检索评估
+
+项目内置了一个轻量评估集，用于对比向量检索、BM25 和 Hybrid+RRF 的召回效果。
+
+```powershell
+cd E:\RAG\code
+python evals/run_retrieval_eval.py
+```
+
+默认输出 `hit@1`、`hit@3` 和 `mrr`。如需机器可读结果：
+
+```powershell
+python evals/run_retrieval_eval.py --json
 ```
