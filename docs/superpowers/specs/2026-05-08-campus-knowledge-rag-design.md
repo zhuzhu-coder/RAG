@@ -1,35 +1,35 @@
-# Campus Knowledge RAG Phase 1 Design
+# 校园知识库 RAG 第一阶段设计
 
-## Goal
+## 目标
 
-Replace the recipe-specific RAG project with a campus knowledge base RAG that can ingest messy real-world campus documents and answer questions grounded in those documents.
+把当前偏“食谱问答”的 RAG 项目，改造成可以面向校园知识库的问答系统，能够处理真实校园文档里常见的杂乱排版，并基于文档内容给出有依据的回答。
 
-This phase removes the `data/cook` recipe corpus, introduces `data/campus`, and updates the ingestion pipeline so the system no longer depends on clean Markdown recipe templates. The first release supports text-extractable `pdf`, `md`, and `txt` files only. Scanned PDFs are out of scope for now and will be reported as unsupported instead of failing the whole build.
+这一阶段会移除 `data/cook` 食谱数据集，改用 `data/campus`，同时把数据接入流程改成不再依赖干净统一的 Markdown 食谱模板。第一版只支持能直接抽取文本的 `pdf`、`md` 和 `txt` 文件。扫描版 PDF 暂不支持，会被标记为不支持，而不是让整个构建流程失败。
 
-## Scope
+## 范围
 
-In scope:
+包含内容：
 
-- Retire the recipe dataset and recipe-specific language.
-- Rebrand the system as a campus knowledge base.
-- Support campus document categories such as regulations, teaching affairs, daily life notices, and announcements.
-- Add robust parsing for non-standard document formatting.
-- Support `pdf`, `md`, and `txt` inputs.
-- Preserve retrieval strategies already in the project: vector, BM25, and hybrid RRF.
-- Keep grounded answers and citations.
-- Replace the old recipe eval default with a small campus smoke eval so the eval command still works after the rebrand.
+- 退役食谱数据集和所有食谱专用表述。
+- 将项目重新定位为校园知识库。
+- 支持校园常见文档类别，例如规章制度、教务教学、生活通知、公告通告等。
+- 支持对不规范排版的文档进行鲁棒解析。
+- 支持 `pdf`、`md`、`txt` 三种输入。
+- 保留现有的向量检索、BM25 和 Hybrid+RRF 检索策略。
+- 保留基于检索结果的回答和引用来源。
+- 把原来的食谱评估入口替换为一个小型校园 smoke eval，确保重命名后评估命令仍可使用。
 
-Out of scope:
+不包含内容：
 
-- OCR for scanned PDFs.
-- FastAPI endpoints.
-- Frontend UI.
-- Incremental indexing.
-- Authentication, permissions, and multi-user management.
+- 扫描版 PDF 的 OCR。
+- FastAPI 接口。
+- 前端页面。
+- 增量索引。
+- 登录、权限、多用户管理。
 
-## Target Data Layout
+## 目标数据目录
 
-Replace the recipe corpus with a campus corpus:
+将食谱语料替换为校园语料：
 
 ```text
 data/campus/
@@ -40,179 +40,179 @@ data/campus/
   other/
 ```
 
-Suggested starter files should be small but representative, covering:
+建议准备少量但有代表性的起始文件，覆盖：
 
-- one or two regulations documents
-- one teaching affairs notice
-- one life/service notice
-- one general announcement
-- at least one text-extractable PDF
+- 一到两份规章制度类文档
+- 一份教务教学通知
+- 一份生活服务类通知
+- 一份普通公告
+- 至少一份可直接抽取文本的 PDF
 
-The corpus should be enough to run the system locally and verify the new parsing paths.
+这批语料要足够让系统在本地跑通，并验证新的解析路径。
 
-## Document Model
+## 文档模型
 
-The old recipe fields are replaced by campus document metadata.
+原来的食谱字段要替换为校园文档元数据。
 
-Required metadata fields:
+必需字段：
 
-- `doc_title`: human-readable document title
-- `doc_category`: regulations / teaching affairs / life / notices / other
-- `department`: issuing department when known
-- `file_type`: `pdf`, `md`, or `txt`
-- `source`: original file path
-- `doc_id`: stable document identifier
-- `chunk_id`: stable chunk identifier
-- `chunk_index`: chunk order within the document
-- `section`: title or inferred section label
-- `page`: PDF page number when available
-- `doc_type`: `parent` or `child`
+- `doc_title`：文档标题
+- `doc_category`：规章制度 / 教务教学 / 生活 / 通知 / 其他
+- `department`：发布部门，能识别时填写
+- `file_type`：`pdf`、`md` 或 `txt`
+- `source`：原始文件路径
+- `doc_id`：稳定文档标识
+- `chunk_id`：稳定分块标识
+- `chunk_index`：文档内分块顺序
+- `section`：标题或推断出的章节名
+- `page`：PDF 页码，若有
+- `doc_type`：`parent` 或 `child`
 
-Optional metadata fields:
+可选字段：
 
 - `source_name`
 - `content_length`
 - `line_count`
 - `file_size`
 
-Title inference priority:
+标题推断优先级：
 
-1. Explicit title inside the document
-2. First Markdown heading
-3. First meaningful non-empty line
-4. File stem
+1. 文档内部显式标题
+2. 第一个 Markdown 标题
+3. 第一个有意义的非空行
+4. 文件名
 5. `未知文档`
 
-## Ingestion and Parsing Design
+## 接入与解析设计
 
-The ingestion path must tolerate inconsistent formatting. It should not assume that every document has clean Markdown headings or a shared template.
+接入流程必须能容忍不一致的格式，不应该假设每份文档都有清晰的 Markdown 标题或统一模板。
 
 ### PDF
 
-- Read text from each page.
-- Preserve page number in metadata.
-- If a page has no extractable text, log it and continue.
-- If the entire PDF yields no extractable text, skip the document and mark it as unsupported.
-- Do not attempt OCR in this phase.
-- Skip or warn on fully unreadable PDFs.
+- 按页抽取文本。
+- 保留页码元数据。
+- 如果某一页没有可提取文本，就记录日志后继续处理。
+- 如果整份 PDF 都抽不出文本，则跳过该文档，并将其标记为本阶段不支持。
+- 本阶段不做 OCR。
+- 对完全无法读取的 PDF 仅告警，不让整批构建中断。
 
 ### Markdown
 
-- Prefer heading-aware splitting when headings exist.
-- If headings are sparse or absent, fall back to generic paragraph/length splitting.
-- Keep headings in chunk text when they help retrieval.
+- 如果存在标题，优先按标题做结构化切分。
+- 如果标题稀疏或缺失，则回退到通用的段落/长度切分。
+- 对检索有帮助时，保留标题文本。
 
 ### TXT
 
-- Normalize line breaks first.
-- Split by blank lines when possible.
-- Merge very short paragraphs.
-- Fall back to fixed-length chunking when formatting is poor.
+- 先规范化换行。
+- 尽量按空行切段。
+- 合并过短段落。
+- 如果格式很乱，再回退到固定长度切分。
 
-### Shared cleaning rules
+### 通用清洗规则
 
-- Remove repeated blank lines.
-- Collapse stray whitespace.
-- Preserve meaningful punctuation.
-- Try to filter obvious page headers, footers, and page numbers when they are repeated.
-- Never let one bad file stop the full indexing run.
+- 去掉重复空行。
+- 压缩多余空白。
+- 保留有意义的标点。
+- 尽量过滤重复出现的页眉、页脚和页码。
+- 单个坏文件不能拖垮整个索引构建流程。
 
-## Chunking Strategy
+## 分块策略
 
-The chunker should be document-type aware:
+分块逻辑必须感知文档类型：
 
-- Markdown: heading-aware first, fallback to generic chunking
-- TXT: paragraph-aware first, fallback to fixed-size chunking
-- PDF: page-aware first, then chunk within each page
+- Markdown：优先按标题切分，失败后回退到通用分块
+- TXT：优先按段落切分，失败后回退到固定长度分块
+- PDF：优先按页处理，再在页内继续分块
 
-Recommended defaults for Chinese campus documents:
+适合中文校园文档的建议默认值：
 
-- `chunk_size`: about 800 to 1200 Chinese characters
-- `chunk_overlap`: about 100 to 200 Chinese characters
+- `chunk_size`：约 800 到 1200 个中文字符
+- `chunk_overlap`：约 100 到 200 个中文字符
 
-Chunking should favor sentence and paragraph boundaries when possible, but it must always have a deterministic fallback.
+分块策略应尽量优先保留句子和段落边界，但必须始终有确定性的兜底方案。
 
-## Module Boundaries
+## 模块边界
 
-To keep responsibilities clear, this phase should separate document loading from document preparation.
+为了保持职责清晰，这一阶段应把“文件加载”和“文档整理”拆开。
 
-Likely file responsibilities:
+建议的文件职责：
 
-- `code/rag_modules/data_preparation.py`: orchestrate loading, metadata enrichment, chunking, parent-child mapping, and statistics
-- `code/rag_modules/document_ingestion.py`: file-type specific loading and text normalization
-- `code/rag_modules/response_schema.py`: structured answer and source records
-- `code/rag_modules/generation_integration.py`: grounded prompt and citation handling
-- `code/main.py`: campus system entrypoint and response assembly
-- `code/config.py`: default campus paths and environment overrides
-- `code/evals/campus_smoke_eval_set.jsonl`: small campus smoke questions for keeping the eval command usable
-- `code/evals/run_retrieval_eval.py`: point the default eval command at the campus smoke set
+- `code/rag_modules/data_preparation.py`：负责加载、元数据补全、分块、父子文档映射和统计
+- `code/rag_modules/document_ingestion.py`：负责不同文件类型的加载和文本清洗
+- `code/rag_modules/response_schema.py`：负责结构化回答和来源记录
+- `code/rag_modules/generation_integration.py`：负责 grounded prompt 和引用处理
+- `code/main.py`：校园系统入口和响应组装
+- `code/config.py`：默认校园路径和环境变量覆盖
+- `code/evals/campus_smoke_eval_set.jsonl`：用于保留评估命令可用性的小型校园问题集
+- `code/evals/run_retrieval_eval.py`：把默认评估入口切到校园 smoke 集
 
-The key design rule is that file-format parsing should not live only inside the big orchestration module.
+关键原则是：文件格式解析不要只堆在一个很大的编排模块里。
 
-## Retrieval and Answer Flow
+## 检索与回答流程
 
-The retrieval stack stays the same:
+检索层保持不变：
 
-- vector search
-- BM25 search
-- hybrid search with RRF
+- 向量检索
+- BM25 检索
+- RRF 混合检索
 
-The answer path changes from recipe-oriented to campus-oriented:
+回答流程从食谱场景改成校园场景：
 
-1. receive a question
-2. retrieve candidate chunks
-3. deduplicate and align chunks to parent documents
-4. build a grounded response with citations
-5. return the final answer plus structured sources
+1. 接收问题
+2. 检索候选文档块
+3. 去重并对齐到父文档
+4. 基于引用来源生成有依据的回答
+5. 返回最终答案和结构化来源
 
-The prompt must instruct the model to:
+Prompt 必须明确要求模型：
 
-- answer only from retrieved campus documents
-- avoid inventing policies, deadlines, locations, or contacts
-- say clearly when the knowledge base does not contain enough evidence
-- cite the source document, section, and page when available
+- 只能基于检索到的校园文档回答
+- 不得编造政策、截止时间、地点或联系方式
+- 当知识库证据不足时，明确说明
+- 在可用时引用文档名、章节和页码
 
-## Error Handling
+## 错误处理
 
-The system should fail soft, not hard:
+系统要“失败可恢复”，而不是“一坏全坏”：
 
-- unreadable file: log warning and continue
-- unsupported file type: skip with warning
-- empty document: skip with warning
-- PDF with no extractable text: mark as unsupported in this phase
-- single-document parsing error: do not stop corpus indexing
-- missing title: infer from filename or label as unknown
+- 文件无法读取：记录警告并继续
+- 不支持的文件类型：跳过并警告
+- 空文档：跳过并警告
+- 无法抽取文本的 PDF：本阶段标记为不支持
+- 单个文档解析失败：不能中断整批语料构建
+- 标题缺失：从文件名推断，或者标记为未知
 
-The build should still succeed if part of the corpus is bad, because campus uploads are often inconsistent.
+校园上传的文档往往不统一，所以整体构建流程必须在部分文件质量差的情况下仍能成功。
 
-## Testing and Verification
+## 测试与验证
 
-This phase should be verified with focused tests:
+这一阶段要用有针对性的测试来验证：
 
-- ingest a mixed `data/campus` corpus
-- confirm `pdf`, `md`, and `txt` all load
-- confirm title inference works when headings are weak or missing
-- confirm unsupported PDFs do not crash the run
-- confirm response schema returns campus-style source records
-- confirm the main CLI still initializes and answers from the new corpus
-- confirm the eval command reads the campus smoke set instead of the retired recipe set
+- 混合的 `data/campus` 语料可以被成功接入
+- `pdf`、`md`、`txt` 都能加载
+- 标题很弱或缺失时，标题推断仍能工作
+- 不支持的 PDF 不会让流程崩溃
+- 返回结构中的来源字段已经变成校园风格
+- 主 CLI 仍然能用新语料完成初始化和问答
+- 评估命令读取的是校园 smoke 集，而不是旧的食谱评估集
 
-Recommended verification command:
+推荐验证命令：
 
 ```powershell
 cd E:\RAG\code
 python -m pytest tests -q -p no:cacheprovider
 ```
 
-Additional manual checks:
+额外的人工检查：
 
-- run the CLI once against the starter campus corpus
-- inspect a sample answer to confirm citations reference the new metadata
-- confirm `README.md` describes `data/campus`, not `data/cook`
-- confirm the retired recipe corpus and recipe eval file are no longer the default project surface
+- 用新的校园语料跑一次 CLI
+- 看一个样例回答，确认引用来源已经指向新的元数据
+- 确认 `README.md` 描述的是 `data/campus`，而不是 `data/cook`
+- 确认旧的食谱语料和食谱评估文件不再是项目默认入口
 
-## Rollout Notes
+## 迁移说明
 
-This phase is intentionally destructive with respect to the old recipe dataset. The new repository identity should be campus knowledge RAG, not recipe RAG. The recipe corpus and recipe-specific wording can be removed rather than preserved.
+这一阶段对旧食谱数据集来说是破坏性的。新的仓库身份应该是“校园知识库 RAG”，而不是“食谱 RAG”。旧的食谱语料和食谱专用措辞都可以直接移除，不需要长期兼容。
 
-FastAPI and frontend work will come after this phase, once the ingestion layer is stable and the new corpus can be queried reliably.
+FastAPI 和前端工作会放在这一阶段之后，前提是接入层已经稳定，并且新语料可以可靠检索与回答。
