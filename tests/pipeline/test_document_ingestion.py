@@ -7,7 +7,7 @@ from campus_rag.pipeline.document_ingestion import infer_doc_category, load_docu
 
 
 def test_load_documents_returns_supported_file_types():
-    docs = load_documents(PROJECT_ROOT / "data" / "campus")
+    docs = load_documents(PROJECT_ROOT / "data" / "knowledge_base" / "campus")
 
     assert docs
     assert {doc.metadata["file_type"] for doc in docs} >= {"md", "txt", "pdf"}

@@ -253,8 +253,8 @@ def test_generation_module_default_model_matches_config_default(monkeypatch):
 
     generator = module.GenerationIntegrationModule()
 
-    assert generator.model_name == "qwen3.5-plus"
-    assert generator.llm.kwargs["model"] == "qwen3.5-plus"
+    assert generator.model_name == "qwen3.6-plus"
+    assert generator.llm.kwargs["model"] == "qwen3.6-plus"
 
 
 def test_rrf_rerank_keeps_distinct_chunks_with_same_content(monkeypatch):
@@ -427,6 +427,18 @@ def test_metadata_filtered_search_rebuilds_bm25_from_all_filtered_chunks(monkeyp
     assert [doc.metadata["chunk_id"] for doc in captured["factory_calls"][1]["documents"]] == ["a", "b", "c"]
 
 
+def test_retrieval_module_uses_generic_metadata_filters(monkeypatch):
+    module = _reload_module(monkeypatch, "campus_rag.pipeline.retrieval_optimization")
+
+    assert not hasattr(module.RetrievalOptimizationModule, "_to_faiss_filters")
+    assert module.RetrievalOptimizationModule._to_metadata_filters(
+        {"doc_category": ["规章制度", "教务教学"], "department": "学生处"}
+    ) == {
+        "doc_category": {"$in": ["规章制度", "教务教学"]},
+        "department": "学生处",
+    }
+
+
 def test_metadata_filtered_search_fallback_uses_expanded_candidate_count(monkeypatch):
     module = _reload_module(monkeypatch, "campus_rag.pipeline.retrieval_optimization")
     captured = {"similarity_calls": []}
@@ -548,6 +560,7 @@ def test_build_manifest_records_chunking_strategy_per_file_type(monkeypatch, tmp
 
     manifest = indexer.build_manifest(str(data_root))
 
+    assert manifest["index_type"] == "Chroma"
     assert set(manifest["chunking"]) >= {"md", "txt", "pdf"}
     assert manifest["chunking"]["md"]["splitter"] == "MarkdownHeaderTextSplitter"
     assert manifest["chunking"]["md"]["fallback"]["splitter"] == "RecursiveCharacterTextSplitter"
@@ -564,15 +577,15 @@ def test_load_index_returns_none_when_manifest_is_missing(monkeypatch):
     indexer.embeddings = object()
     indexer.vectorstore = None
 
-    def fail_load_local(*args, **kwargs):
-        raise AssertionError("FAISS.load_local should not be called without a matching manifest")
+    def fail_chroma_load(*args, **kwargs):
+        raise AssertionError("Chroma should not be loaded without a matching manifest")
 
-    monkeypatch.setattr(module.FAISS, "load_local", fail_load_local)
+    monkeypatch.setattr(module, "Chroma", fail_chroma_load)
 
     assert indexer.load_index({"schema_version": 1}) is None
 
 
-def test_load_index_uses_faiss_when_manifest_matches(monkeypatch):
+def test_load_index_uses_chroma_when_manifest_matches(monkeypatch):
     module = _reload_module(monkeypatch, "campus_rag.pipeline.index_construction")
     indexer = module.IndexConstructionModule.__new__(module.IndexConstructionModule)
     index_path = Path(__file__).resolve().parent
@@ -581,7 +594,7 @@ def test_load_index_uses_faiss_when_manifest_matches(monkeypatch):
     indexer.vectorstore = None
     expected_manifest = {
         "schema_version": 1,
-        "index_type": "FAISS",
+        "index_type": "Chroma",
         "embedding_model": "text-embedding-v4",
         "embedding_dimensions": 1024,
         "chunking": {"splitter": "MarkdownHeaderTextSplitter"},
@@ -591,13 +604,57 @@ def test_load_index_uses_faiss_when_manifest_matches(monkeypatch):
     monkeypatch.setattr(indexer, "load_manifest", lambda: expected_manifest)
     sentinel_vectorstore = object()
 
-    def fake_load_local(path, embeddings, allow_dangerous_deserialization):
-        assert path == str(index_path)
-        assert embeddings is indexer.embeddings
-        assert allow_dangerous_deserialization is True
+    def fake_chroma(collection_name, embedding_function, persist_directory):
+        assert collection_name == module.CHROMA_COLLECTION_NAME
+        assert embedding_function is indexer.embeddings
+        assert persist_directory == str(index_path)
         return sentinel_vectorstore
 
-    monkeypatch.setattr(module.FAISS, "load_local", fake_load_local)
+    monkeypatch.setattr(module, "Chroma", fake_chroma)
 
     assert indexer.load_index(expected_manifest) is sentinel_vectorstore
+
+
+def test_build_vector_index_resets_chroma_collection_and_uses_chunk_ids(monkeypatch, tmp_path):
+    module = _reload_module(monkeypatch, "campus_rag.pipeline.index_construction")
+    indexer = module.IndexConstructionModule.__new__(module.IndexConstructionModule)
+    indexer.index_save_path = str(tmp_path / "storage" / "chroma")
+    indexer.embeddings = object()
+    indexer.vectorstore = None
+
+    captured = {}
+
+    class FakeChroma:
+        def __init__(self, collection_name, embedding_function, persist_directory):
+            captured["init"] = {
+                "collection_name": collection_name,
+                "embedding_function": embedding_function,
+                "persist_directory": persist_directory,
+            }
+            self.reset_calls = 0
+            self.added = None
+
+        def reset_collection(self):
+            self.reset_calls += 1
+
+        def add_documents(self, documents, ids):
+            self.added = {"documents": documents, "ids": ids}
+            return ids
+
+    monkeypatch.setattr(module, "Chroma", FakeChroma)
+    chunks = [
+        Document(page_content="学生请假流程", metadata={"chunk_id": "chunk-a"}),
+        Document(page_content="校园卡补办", metadata={"chunk_id": "chunk-b"}),
+    ]
+
+    vectorstore = indexer.build_vector_index(chunks)
+
+    assert captured["init"] == {
+        "collection_name": module.CHROMA_COLLECTION_NAME,
+        "embedding_function": indexer.embeddings,
+        "persist_directory": str(tmp_path / "storage" / "chroma"),
+    }
+    assert vectorstore.reset_calls == 1
+    assert vectorstore.added["documents"] == chunks
+    assert vectorstore.added["ids"] == ["chunk-a", "chunk-b"]
 

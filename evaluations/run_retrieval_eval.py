@@ -2,7 +2,7 @@
 RAG检索评估入口
 
 运行方式:
-    python evals/run_retrieval_eval.py
+    python evaluations/run_retrieval_eval.py
 """
 
 import argparse
@@ -17,7 +17,7 @@ from campus_rag.pipeline.data_preparation import DataPreparationModule
 from campus_rag.pipeline.retrieval_optimization import tokenize_chinese_text
 
 # 默认评估集文件路径
-DEFAULT_EVAL_SET = Path(__file__).resolve().with_name("campus_smoke_eval_set.jsonl")
+DEFAULT_EVAL_SET = Path(__file__).resolve().parent / "datasets" / "campus_smoke_eval_set.jsonl"
 # 默认评估的检索策略
 DEFAULT_STRATEGIES = ("vector", "bm25", "hybrid")
 

@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
 from .chunking_config import CHUNKING_CONFIG
@@ -25,7 +25,9 @@ MANIFEST_FILENAME = "index_manifest.json"
 # manifest 结构版本
 MANIFEST_SCHEMA_VERSION = 1
 # 索引类型
-INDEX_TYPE = "FAISS"
+INDEX_TYPE = "Chroma"
+# Chroma collection 名称
+CHROMA_COLLECTION_NAME = "campus_rag_chunks"
 # embedding 向量维度
 EMBEDDING_DIMENSIONS = 1024
 # embedding 请求超时时间，避免网络异常时长时间挂起
@@ -45,7 +47,7 @@ MANIFEST_COMPARE_KEYS = [
 class IndexConstructionModule:
     """索引构建模块 - 负责向量化和索引构建"""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5", index_save_path: str = "./vector_index"):
+    def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5", index_save_path: str = "./storage/chroma"):
         """
         初始化索引构建模块
         Args:
@@ -245,11 +247,11 @@ class IndexConstructionModule:
             return None
 
         try:
-            # 从本地目录加载向量索引
-            self.vectorstore = FAISS.load_local(
-                self.index_save_path,
-                self.embeddings,
-                allow_dangerous_deserialization=True # 允许危险反序列化，用于加载本地索引
+            # 从本地目录加载 Chroma collection
+            self.vectorstore = Chroma(
+                collection_name=CHROMA_COLLECTION_NAME,
+                embedding_function=self.embeddings,
+                persist_directory=self.index_save_path,
             )
             logger.info(f"向量索引已从 {self.index_save_path} 加载")
             return self.vectorstore
@@ -257,24 +259,28 @@ class IndexConstructionModule:
             logger.warning(f"加载向量索引失败: {e}，将构建新索引")
             return None
     
-    def build_vector_index(self, chunks: List[Document]) -> FAISS:
+    def build_vector_index(self, chunks: List[Document]) -> Chroma:
         """
         构建向量索引
         Args:
             chunks: 文档块列表
         Returns:
-            FAISS向量存储对象
+            Chroma向量存储对象
         """
-        logger.info("正在构建FAISS向量索引...")
+        logger.info("正在构建Chroma向量索引...")
         
         if not chunks:
             raise ValueError("文档块列表不能为空")
         
-        # 构建FAISS向量存储
-        self.vectorstore = FAISS.from_documents(
-            documents=chunks,
-            embedding=self.embeddings
+        Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
+        # 构建 Chroma 向量存储；重建时清空 collection，避免旧向量混入新索引
+        self.vectorstore = Chroma(
+            collection_name=CHROMA_COLLECTION_NAME,
+            embedding_function=self.embeddings,
+            persist_directory=self.index_save_path,
         )
+        self.vectorstore.reset_collection()
+        self.vectorstore.add_documents(chunks, ids=self._chunk_ids(chunks))
         
         logger.info(f"向量索引构建完成，包含 {len(chunks)} 个向量")
         return self.vectorstore
@@ -289,7 +295,7 @@ class IndexConstructionModule:
             raise ValueError("请先构建向量索引")
         
         logger.info(f"正在添加 {len(new_chunks)} 个新文档块到索引...")
-        self.vectorstore.add_documents(new_chunks)
+        self.vectorstore.add_documents(new_chunks, ids=self._chunk_ids(new_chunks))
         logger.info("新文档块添加完成")
 
     def save_index(self):
@@ -301,6 +307,14 @@ class IndexConstructionModule:
 
         # 确保保存目录存在
         Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
-        # 保存向量索引到本地目录
-        self.vectorstore.save_local(self.index_save_path)
+        # Chroma 使用 persist_directory 自动持久化，这里保留显式入口便于编排层调用
         logger.info(f"向量索引已保存到: {self.index_save_path}")
+
+    @staticmethod
+    def _chunk_ids(chunks: List[Document]) -> List[str]:
+        """提取稳定的 Chroma 文档 ID。"""
+        ids = []
+        for position, chunk in enumerate(chunks):
+            metadata = chunk.metadata or {}
+            ids.append(str(metadata.get("chunk_id") or f"chunk-{position}"))
+        return ids

@@ -19,10 +19,19 @@ from .pipeline import (
     RetrievalOptimizationModule,
 )
 
-# 拼接路径，加载环境变量
-load_dotenv(PROJECT_ROOT / ".env")
-# 兜底加载
-load_dotenv()
+def _load_environment(project_root: Path = PROJECT_ROOT) -> None:
+    """加载环境变量，只读取项目根目录或当前目录的 .env。"""
+    project_env = project_root / ".env"
+    if project_env.exists():
+        load_dotenv(project_env)
+        return
+
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.exists():
+        load_dotenv(cwd_env)
+
+
+_load_environment()
 
 # 配置日志
 logging.basicConfig(
@@ -58,7 +67,7 @@ class CampusRAGSystem:
         # 检查数据路径是否存在；如果环境变量还指向旧路径，自动回退到校园知识库目录
         data_path = Path(self.config.data_path)
         if not data_path.exists():
-            campus_data_path = PROJECT_ROOT / "data" / "campus"
+            campus_data_path = PROJECT_ROOT / "data" / "knowledge_base" / "campus"
             if campus_data_path.exists():
                 logger.warning("数据路径不存在，已回退到校园知识库目录: %s -> %s", data_path, campus_data_path)
                 self.config.data_path = str(campus_data_path)

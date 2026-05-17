@@ -9,9 +9,14 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 pytest-cache-files-*/
+storage/
 vector_index/
+frontend/dist/
+frontend/node_modules/
+frontend/node_modules/.vite/
+frontend/node_modules/.tmp/
 *.log
 uvicorn-*.log
-evals/results/*
-!evals/results/2026-05-12-bm25-baseline.json
-!evals/results/2026-05-12-vector-bm25-hybrid-summary.json
+evaluations/results/*
+!evaluations/results/2026-05-12-bm25-baseline.json
+!evaluations/results/2026-05-12-vector-bm25-hybrid-summary.json

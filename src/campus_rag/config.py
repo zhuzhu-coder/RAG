@@ -23,12 +23,12 @@ class RAGConfig:
     """RAG系统配置类"""
 
     # 路径配置
-    data_path: str = field(default_factory=lambda: str(PROJECT_ROOT / "data" / "campus"))# 默认数据目录
-    index_save_path: str = field(default_factory=lambda: str(PROJECT_ROOT / "vector_index"))# 默认向量索引目录
+    data_path: str = field(default_factory=lambda: str(PROJECT_ROOT / "data" / "knowledge_base" / "campus"))# 默认数据目录
+    index_save_path: str = field(default_factory=lambda: str(PROJECT_ROOT / "storage" / "chroma"))# 默认向量索引目录
 
     # 模型配置
     embedding_model: str = "text-embedding-v4"
-    llm_model: str = "qwen3.5-plus"
+    llm_model: str = "qwen3.6-plus"
 
     # 检索配置
     top_k: int = 3

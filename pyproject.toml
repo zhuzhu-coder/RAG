@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "campus-rag"
 version = "1.0.0"
-description = "Campus knowledge-base RAG service with CLI, FastAPI, retrieval evaluation, and static web UI."
+description = "Campus knowledge-base RAG service with CLI, FastAPI, retrieval evaluation, Chroma, and React web UI."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
     "langchain-community>=0.4,<1",
     "langchain-text-splitters>=1.0,<2",
     "langchain-openai>=1.0,<2",
-    "faiss-cpu>=1.7.0",
+    "langchain-chroma>=1.0,<2",
     "rank_bm25>=0.2.2",
     "python-dotenv>=1.0.0",
     "jieba>=0.42.1",
@@ -35,9 +35,6 @@ campus-rag = "campus_rag.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-campus_rag = ["static/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

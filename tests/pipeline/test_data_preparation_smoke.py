@@ -2,6 +2,8 @@ from campus_rag.config import PROJECT_ROOT
 from langchain_core.documents import Document
 from campus_rag.pipeline.data_preparation import DataPreparationModule
 
+DATA_ROOT = PROJECT_ROOT / "data" / "knowledge_base" / "campus"
+
 
 def _chunk(parent_id, chunk_index, content):
     return Document(
@@ -21,7 +23,7 @@ def _chunk(parent_id, chunk_index, content):
 
 
 def test_campus_documents_can_be_loaded_and_chunked():
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
 
     documents = module.load_documents()
     chunks = module.chunk_documents()
@@ -45,7 +47,7 @@ def test_campus_documents_can_be_loaded_and_chunked():
 
 
 def test_normalize_parent_metadata_does_not_add_parent_section():
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
     parent_doc = Document(
         page_content="学生请假管理办法",
         metadata={
@@ -65,7 +67,7 @@ def test_normalize_parent_metadata_does_not_add_parent_section():
 
 
 def test_chunk_documents_normalizes_raw_splitter_output_once(monkeypatch):
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
     parent_doc = Document(
         page_content="第一行\r\n\r\n   第二行",
         metadata={
@@ -95,7 +97,7 @@ def test_chunk_documents_normalizes_raw_splitter_output_once(monkeypatch):
 
 
 def test_get_context_documents_backfills_neighbor_chunks_and_parent_metadata():
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
     parent_doc = Document(
         page_content="完整父文档不应直接进入生成上下文。",
         metadata={
@@ -138,7 +140,7 @@ def test_get_context_documents_backfills_neighbor_chunks_and_parent_metadata():
 
 
 def test_get_context_documents_deduplicates_overlapping_windows_in_chunk_order():
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
     parent_doc = Document(
         page_content="完整父文档",
         metadata={"parent_id": "parent-dorm", "doc_title": "宿舍晚归登记说明"},
@@ -162,7 +164,7 @@ def test_get_context_documents_deduplicates_overlapping_windows_in_chunk_order()
 
 
 def test_get_context_documents_handles_missing_neighbors_without_error():
-    module = DataPreparationModule(str(PROJECT_ROOT / "data" / "campus"))
+    module = DataPreparationModule(str(DATA_ROOT))
     chunk = _chunk("parent-single", 0, "唯一命中片段")
     module.documents = []
     module.parent_documents_map = {}

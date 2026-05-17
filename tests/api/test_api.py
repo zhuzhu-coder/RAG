@@ -118,6 +118,23 @@ def build_client_with_factory(factory):
     return TestClient(create_app(system_factory=factory))
 
 
+def build_client_with_frontend(tmp_path):
+    import campus_rag.api as api_module
+
+    dist_dir = tmp_path / "frontend" / "dist"
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text(
+        '<!doctype html><html><body><div id="root">CampusMind React</div></body></html>',
+        encoding="utf-8",
+    )
+    (assets_dir / "app.js").write_text("console.log('react app')", encoding="utf-8")
+
+    api_module.FRONTEND_DIST_DIR = dist_dir
+    api_module.FRONTEND_INDEX = dist_dir / "index.html"
+    return build_client_with_factory(FakeRAGSystem)
+
+
 def test_health_does_not_initialize_rag_system():
     client, created_systems = build_client()
 
@@ -128,31 +145,38 @@ def test_health_does_not_initialize_rag_system():
     assert created_systems == []
 
 
-def test_root_serves_frontend_shell_without_initializing_rag_system():
+def test_root_reports_frontend_not_built_without_initializing_rag_system(tmp_path):
+    import campus_rag.api as api_module
+
+    api_module.FRONTEND_DIST_DIR = tmp_path / "missing-dist"
+    api_module.FRONTEND_INDEX = api_module.FRONTEND_DIST_DIR / "index.html"
     client, created_systems = build_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "frontend_not_built"
+    assert created_systems == []
+
+
+def test_root_serves_built_react_frontend_without_initializing_rag_system(tmp_path):
+    client = build_client_with_frontend(tmp_path)
 
     response = client.get("/")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert 'id="app"' in response.text
-    assert "校园知识库 RAG" in response.text
-    assert created_systems == []
+    assert "CampusMind React" in response.text
 
 
-def test_static_frontend_assets_are_served():
-    client, created_systems = build_client()
+def test_built_react_assets_are_served(tmp_path):
+    client = build_client_with_frontend(tmp_path)
 
-    script_response = client.get("/static/app.js")
-    style_response = client.get("/static/styles.css")
+    response = client.get("/assets/app.js")
 
-    assert script_response.status_code == 200
-    assert "javascript" in script_response.headers["content-type"]
-    assert "checkReady" in script_response.text
-    assert style_response.status_code == 200
-    assert "text/css" in style_response.headers["content-type"]
-    assert ".app-shell" in style_response.text
-    assert created_systems == []
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+    assert "react app" in response.text
 
 
 def test_response_includes_request_id_and_process_time_headers():
@@ -290,6 +314,35 @@ def test_ask_returns_structured_error_when_rag_call_fails():
             "code": "internal_error",
             "message": "服务内部错误",
             "request_id": "req-ask-fail",
+        }
+    }
+
+
+def test_ask_returns_clear_error_for_upstream_model_failure():
+    class FakeOpenAIError(Exception):
+        pass
+
+    FakeOpenAIError.__module__ = "openai"
+
+    class FailingAskRAGSystem(FakeRAGSystem):
+        def ask_question(self, question, stream=False, return_sources=False, return_trace=False):
+            raise FakeOpenAIError("The free tier of the model has been exhausted.")
+
+    client = build_client_with_factory(FailingAskRAGSystem)
+
+    response = client.post(
+        "/ask",
+        json={"question": "我晚归了会怎么样"},
+        headers={"X-Request-ID": "req-model-fail"},
+    )
+
+    assert response.status_code == 502
+    assert response.headers["X-Request-ID"] == "req-model-fail"
+    assert response.json() == {
+        "error": {
+            "code": "upstream_model_error",
+            "message": "上游模型服务请求失败: The free tier of the model has been exhausted.",
+            "request_id": "req-model-fail",
         }
     }
 

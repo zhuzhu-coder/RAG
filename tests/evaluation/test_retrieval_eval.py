@@ -1,6 +1,6 @@
 from langchain_core.documents import Document
 
-from evals.run_retrieval_eval import (
+from evaluations.run_retrieval_eval import (
     DEFAULT_EVAL_SET,
     DEFAULT_STRATEGIES,
     configure_utf8_stdio,

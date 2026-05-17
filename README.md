@@ -1,6 +1,6 @@
 # CampusMind RAG
 
-CampusMind RAG 是一个面向校园知识库的 RAG 问答系统，覆盖规章制度、教务通知、生活服务、图书馆公告和网络维护等高频校园文档场景。系统基于 LangChain 1.x、FAISS、BM25、RRF 和 FastAPI 构建，支持 PDF、Markdown、TXT 文档接入，提供 CLI、Web、HTTP API、结构化来源、Trace 链路和检索评估闭环。
+CampusMind RAG 是一个面向校园知识库的 RAG 问答系统，覆盖规章制度、教务通知、生活服务、图书馆公告和网络维护等高频校园文档场景。系统基于 LangChain 1.x、Chroma、BM25、RRF、FastAPI 和 React 构建，支持 PDF、Markdown、TXT 文档接入，提供 CLI、Web、HTTP API、结构化来源、Trace 链路和检索评估闭环。
 
 | 项目维度 | 说明 |
 | --- | --- |
@@ -14,7 +14,7 @@ CampusMind RAG 是一个面向校园知识库的 RAG 问答系统，覆盖规章
 ## 核心亮点
 
 - 多格式文档接入：统一加载 PDF、Markdown、TXT，抽取标题、分类、部门、文件类型、来源路径、页码和章节等元数据。
-- 索引缓存机制：使用 FAISS 保存本地向量索引，通过 manifest 记录数据指纹、embedding 模型和分块策略，减少重复构建成本。
+- 索引缓存机制：使用 Chroma 保存本地向量数据库，通过 manifest 记录数据指纹、embedding 模型和分块策略，减少重复构建成本。
 - Hybrid 检索链路：同时保留语义检索和关键词检索能力，通过 RRF 融合排序，在中文校园问答场景中提升召回稳定性。
 - 证据窗口：命中 chunk 后回填相邻片段作为生成上下文，兼顾答案完整性、上下文噪声和 token 成本。
 - Grounded Answer：回答严格基于检索上下文，输出与答案引用编号对齐的结构化来源。
@@ -29,11 +29,11 @@ CampusMind RAG 是一个面向校园知识库的 RAG 问答系统，覆盖规章
 | 语言与工程 | Python 3.11+、setuptools、pytest |
 | 文档处理 | LangChain document loaders、pypdf |
 | 分块策略 | MarkdownHeaderTextSplitter、RecursiveCharacterTextSplitter |
-| 向量索引 | FAISS |
+| 向量索引 | Chroma 本地持久化 |
 | 关键词检索 | BM25、jieba 中文分词 |
 | 生成模型 | DashScope OpenAI-compatible API |
 | API 服务 | FastAPI、Uvicorn |
-| 前端页面 | HTML、CSS、JavaScript |
+| 前端页面 | React、TypeScript、Vite |
 | 评估体系 | 自建 JSONL 评估集、hit@k、MRR、keyword coverage |
 
 ## 快速开始
@@ -53,10 +53,10 @@ python -m pip install -e ".[dev]"
 DASHSCOPE_API_KEY=your_dashscope_api_key_here
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
-RAG_DATA_PATH=data/campus
-RAG_INDEX_SAVE_PATH=vector_index
+RAG_DATA_PATH=data/knowledge_base/campus
+RAG_INDEX_SAVE_PATH=storage/chroma
 RAG_EMBEDDING_MODEL=text-embedding-v4
-RAG_LLM_MODEL=qwen3.5-plus
+RAG_LLM_MODEL=qwen3.6-plus
 RAG_TOP_K=3
 RAG_RETRIEVAL_CANDIDATE_K=10
 RAG_RRF_K=60
@@ -67,13 +67,13 @@ RAG_MAX_TOKENS=2048
 
 ### 3. 准备校园文档
 
-默认知识库目录为 `data/campus/`，推荐按业务域组织文件：
+默认知识库目录为 `data/knowledge_base/campus/`，推荐按业务域组织文件：
 
 ```text
-data/campus/regulations/student_affairs/学生请假管理办法.md
-data/campus/teaching/exams/期末考试安排.txt
-data/campus/life/dormitory/宿舍晚归登记说明.md
-data/campus/notices/library/图书馆临时闭馆.pdf
+data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md
+data/knowledge_base/campus/teaching/exams/期末考试安排.txt
+data/knowledge_base/campus/life/dormitory/宿舍晚归登记说明.md
+data/knowledge_base/campus/notices/library/图书馆临时闭馆.pdf
 ```
 
 ### 4. 启动命令行问答
@@ -90,6 +90,15 @@ campus-rag
 
 ### 5. 启动 FastAPI 服务
 
+首次访问 Web 页面前先构建 React 前端：
+
+```powershell
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
 ```powershell
 python -X utf8 -m uvicorn campus_rag.api:app --host 127.0.0.1 --port 8000
 ```
@@ -98,7 +107,7 @@ python -X utf8 -m uvicorn campus_rag.api:app --host 127.0.0.1 --port 8000
 
 | 地址 | 说明 |
 | --- | --- |
-| `http://127.0.0.1:8000/` | Web 问答页 |
+| `http://127.0.0.1:8000/` | React Web 问答页 |
 | `http://127.0.0.1:8000/docs` | Swagger API 文档 |
 | `http://127.0.0.1:8000/health` | 服务健康检查 |
 
@@ -117,7 +126,7 @@ PDF / Markdown / TXT 校园文档
 parent_id / chunk_id / chunk_index / section
         |
         v
-FAISS 向量索引  +  BM25 关键词索引
+Chroma 向量数据库  +  BM25 关键词索引
         |
         v
 Vector / BM25 / Hybrid 检索
@@ -181,7 +190,7 @@ chunk_index + window_size
       "department": "学生处",
       "file_type": "md",
       "section": "晚归登记",
-      "source": "data/campus/life/dormitory/宿舍晚归登记说明.md",
+      "source": "data/knowledge_base/campus/life/dormitory/宿舍晚归登记说明.md",
       "page": null,
       "chunk_index": 0,
       "rrf_score": 0.03,
@@ -217,18 +226,18 @@ chunk_index + window_size
 
 ## 检索评估
 
-评估集位于 `evals/campus_smoke_eval_set.jsonl`，覆盖规章制度、教务教学、生活服务、图书馆公告和信息中心通知等场景。
+评估集位于 `evaluations/datasets/campus_smoke_eval_set.jsonl`，覆盖规章制度、教务教学、生活服务、图书馆公告和信息中心通知等场景。
 
 BM25-only 评估不依赖 DashScope API Key：
 
 ```powershell
-python evals\run_retrieval_eval.py --strategies bm25 --json
+python evaluations\run_retrieval_eval.py --strategies bm25 --json
 ```
 
 Vector / Hybrid 评估需要可用的 DashScope API Key：
 
 ```powershell
-python evals\run_retrieval_eval.py --strategies vector bm25 hybrid --json
+python evaluations\run_retrieval_eval.py --strategies vector bm25 hybrid --json
 ```
 
 当前三策略评估结果：
@@ -242,8 +251,8 @@ python evals\run_retrieval_eval.py --strategies vector bm25 hybrid --json
 评估结果文件：
 
 ```text
-evals/results/2026-05-12-bm25-baseline.json
-evals/results/2026-05-12-vector-bm25-hybrid-summary.json
+evaluations/results/2026-05-12-bm25-baseline.json
+evaluations/results/2026-05-12-vector-bm25-hybrid-summary.json
 ```
 
 ## 测试与质量
@@ -259,7 +268,7 @@ python -m pytest
 - 配置读取和项目路径解析
 - PDF、Markdown、TXT 文档加载
 - 文档分块、父子文档映射和证据窗口
-- FAISS 索引 manifest 与本地索引缓存
+- Chroma 索引 manifest 与本地向量数据库缓存
 - Vector、BM25、Hybrid 检索和 RRF 排序
 - Grounded Answer prompt、引用来源和流式输出
 - API 健康检查、预热、问答、错误响应和静态资源托管
@@ -274,23 +283,29 @@ src/campus_rag/
   config.py              # 环境变量与项目路径配置
   system.py              # RAG 系统编排
   pipeline/              # 文档接入、分块、索引、检索、生成、响应 schema
-  static/                # Web 问答页
 
-tests/                   # 单元测试与 API 测试
-evals/                   # 检索评估脚本、评估集和结果
-data/campus/             # 校园知识库文档
-vector_index/            # 本地索引运行产物
+frontend/                # React + TypeScript + Vite Web 问答台
+  src/app/               # 页面入口与应用组合
+  src/api/               # 前端 API client
+  src/components/        # 可复用 UI 组件
+  src/styles/            # 前端样式
+  src/types/             # API 与业务类型
+
+tests/                   # 按 api、pipeline、system、evaluation 分组的测试
+evaluations/             # 检索评估脚本、评估集和结果
+data/knowledge_base/campus/ # 校园知识库文档
+storage/chroma/          # 本地 Chroma 运行产物
 pyproject.toml           # 包元数据、依赖、pytest 配置、命令入口
 .env.example             # 环境变量模板
 ```
 
-默认读取 `data/campus`，默认把本地索引写入 `vector_index/`。所有相对路径都会按项目根目录解析，因此从根目录、`src/` 子目录或安装后的包入口运行都能得到一致路径。
+默认读取 `data/knowledge_base/campus`，默认把本地向量数据库写入 `storage/chroma/`。所有相对路径都会按项目根目录解析，因此从根目录、`src/` 子目录或安装后的包入口运行都能得到一致路径。
 
 ## 开发说明
 
-- `.env`、`.venv/`、`vector_index/`、缓存目录和临时评估结果不进入版本库。
-- `vector_index/` 是本地运行产物，删除后会在下次构建知识库时重新生成。
-- `evals/results/2026-05-12-bm25-baseline.json` 是已保存 baseline，便于对比检索效果。
+- `.env`、`.venv/`、`storage/`、`frontend/dist/`、`frontend/node_modules/`、缓存目录和临时评估结果不进入版本库。
+- `storage/chroma/` 是本地运行产物，删除后会在下次构建知识库时重新生成。
+- `evaluations/results/2026-05-12-bm25-baseline.json` 是已保存 baseline，便于对比检索效果。
 - 涉及检索、分块、来源或 Trace 链路时，建议同时运行 `python -m pytest` 和检索评估命令。
 
 ## Roadmap

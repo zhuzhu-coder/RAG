@@ -376,6 +376,22 @@ def test_campus_rag_system_default_config_reads_current_environment(monkeypatch)
     assert system.config.retrieval_candidate_k == 14
 
 
+def test_environment_loader_does_not_search_parent_directories(monkeypatch, tmp_path):
+    import campus_rag.system as system_module
+
+    project_root = tmp_path / "repo" / ".worktrees" / "feature"
+    project_root.mkdir(parents=True)
+    parent_env = tmp_path / "repo" / ".env"
+    parent_env.write_text("RAG_DATA_PATH=parent_data\n", encoding="utf-8")
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.delenv("RAG_DATA_PATH", raising=False)
+
+    system_module._load_environment(project_root)
+
+    assert "RAG_DATA_PATH" not in os.environ
+
+
 def test_interactive_empty_question_prompts_again(monkeypatch, capsys):
     system = CampusRAGSystem()
     monkeypatch.setattr(system, "initialize_system", lambda: None)

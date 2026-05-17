@@ -8,7 +8,6 @@ import warnings
 from functools import lru_cache
 from typing import List, Dict, Any
 
-from langchain_community.vectorstores import FAISS
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
@@ -53,11 +52,11 @@ def _get_jieba_cut_for_search():
 class RetrievalOptimizationModule:
     """检索优化模块 - 负责混合检索和过滤"""
     
-    def __init__(self, vectorstore: FAISS, chunks: List[Document], candidate_k: int = 10, rrf_k: int = 60):
+    def __init__(self, vectorstore: Any, chunks: List[Document], candidate_k: int = 10, rrf_k: int = 60):
         """
         初始化检索优化模块
         Args:
-            vectorstore: FAISS向量存储
+            vectorstore: LangChain 向量存储
             chunks: 文档块列表
             candidate_k: 每个检索器返回的候选文档块数量
             rrf_k: RRF 平滑参数
@@ -136,7 +135,7 @@ class RetrievalOptimizationModule:
             过滤后的文档块列表
         """
         candidate_k = max(self.candidate_k, top_k * 3) # 避免过滤后结果不够
-        faiss_filters = self._to_faiss_filters(filters) # Faiss 可识别的过滤条件
+        metadata_filters = self._to_metadata_filters(filters) # 向量库可识别的过滤条件
         filtered_chunks = [
             chunk for chunk in self.chunks
             if self._matches_filters(chunk, filters)
@@ -146,7 +145,7 @@ class RetrievalOptimizationModule:
             vector_chunks = self.vectorstore.similarity_search(
                 query,
                 k=candidate_k,
-                filter=faiss_filters, # 应用元数据过滤条件
+                filter=metadata_filters, # 应用元数据过滤条件
             )
         except TypeError:
             # 如果向量检索器不支持元数据过滤
@@ -276,16 +275,16 @@ class RetrievalOptimizationModule:
         return True
 
     @staticmethod
-    def _to_faiss_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
+    def _to_metadata_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
         """
-        将元数据过滤条件转换为Faiss可识别的格式
+        将元数据过滤条件转换为 LangChain 向量库可识别的格式
         Args:
             filters: 元数据过滤条件字典
         Returns:
-            Faiss可识别的过滤条件
+            向量库可识别的过滤条件
         """
-        faiss_filters = {}
+        metadata_filters = {}
         for key, value in filters.items():
-            # 如果值是列表，转换为Faiss所支持的$in操作符，否则直接赋值
-            faiss_filters[key] = {"$in": value} if isinstance(value, list) else value
-        return faiss_filters
+            # 如果值是列表，转换为 LangChain/Chroma 支持的 $in 操作符，否则直接赋值
+            metadata_filters[key] = {"$in": value} if isinstance(value, list) else value
+        return metadata_filters

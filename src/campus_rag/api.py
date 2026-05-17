@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
+from .config import PROJECT_ROOT
 from .system import CampusRAGSystem
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,9 @@ logger = logging.getLogger(__name__)
 REQUEST_ID_HEADER = "X-Request-ID"
 # 定义响应头字段
 PROCESS_TIME_HEADER = "X-Process-Time-MS"
-# 前端静态资源目录
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+# React 前端构建产物目录
+FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
+FRONTEND_INDEX = FRONTEND_DIST_DIR / "index.html"
 
 
 class AskRequest(BaseModel):
@@ -142,6 +144,22 @@ def _build_error_response(
     )
 
 
+def _is_upstream_model_error(exc: Exception) -> bool:
+    """判断异常是否来自 OpenAI-compatible 上游模型服务。"""
+    module_name = exc.__class__.__module__
+    return module_name == "openai" or module_name.startswith("openai.")
+
+
+def _build_upstream_model_error_response(exc: Exception, request_id: str) -> JSONResponse:
+    """构造上游模型服务错误响应，避免前端只能看到泛化的 500。"""
+    return _build_error_response(
+        code="upstream_model_error",
+        message=f"上游模型服务请求失败: {exc}",
+        request_id=request_id,
+        status_code=502,
+    )
+
+
 def create_app(system_factory: Callable[[], CampusRAGSystem] | None = None) -> FastAPI:
     """
     创建 FastAPI 应用，测试时可注入 fake RAG 系统
@@ -152,19 +170,22 @@ def create_app(system_factory: Callable[[], CampusRAGSystem] | None = None) -> F
     """
     service = RAGService(system_factory or CampusRAGSystem)
     app = FastAPI(title="Campus Knowledge RAG API")
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    frontend_assets_dir = FRONTEND_DIST_DIR / "assets"
+    if frontend_assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=frontend_assets_dir), name="frontend-assets")
 
     @app.middleware("http") # http 中间件
     async def request_context_middleware(request: Request, call_next):
         """为每个请求补充 request id、耗时统计和兜底错误响应"""
         request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
+        request.state.request_id = request_id
         start_time = time.perf_counter() # 请求开始时间
         status_code = 500 # 默认状态码
 
         try:
             response = await call_next(request)
             status_code = response.status_code
-        except Exception:
+        except Exception as exc:
             ready_state = service.ready()
             # 如果 RAG 系统初始化失败，返回 503 错误
             if ready_state.get("status") == "error":
@@ -174,6 +195,8 @@ def create_app(system_factory: Callable[[], CampusRAGSystem] | None = None) -> F
                     request_id=request_id,
                     status_code=503,
                 )
+            elif _is_upstream_model_error(exc):
+                response = _build_upstream_model_error_response(exc, request_id)
             else:
                 # 其他异常，返回 500 错误
                 response = _build_error_response(
@@ -204,9 +227,17 @@ def create_app(system_factory: Callable[[], CampusRAGSystem] | None = None) -> F
         return response
 
     @app.get("/", include_in_schema=False)
-    def frontend() -> FileResponse:
-        """返回轻量问答前端页面"""
-        return FileResponse(STATIC_DIR / "index.html")
+    def frontend(request: Request):
+        """返回 React 问答前端页面"""
+        if not FRONTEND_INDEX.exists():
+            request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex
+            return _build_error_response(
+                code="frontend_not_built",
+                message="React frontend has not been built. Run `npm install` and `npm run build` in frontend/.",
+                request_id=request_id,
+                status_code=503,
+            )
+        return FileResponse(FRONTEND_INDEX)
 
     @app.get("/health")
     def health() -> dict:

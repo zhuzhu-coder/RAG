@@ -29,7 +29,7 @@ class QueryAnalysis:
 class GenerationIntegrationModule:
     """生成集成模块 - 负责LLM集成和回答生成"""
     
-    def __init__(self, model_name: str = "qwen3.5-plus", temperature: float = 0.1, max_tokens: int = 2048):
+    def __init__(self, model_name: str = "qwen3.6-plus", temperature: float = 0.1, max_tokens: int = 2048):
         """
         初始化生成集成模块
         Args:
