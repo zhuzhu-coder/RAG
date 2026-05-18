@@ -40,7 +40,6 @@ class FakeIndexConstructionModule:
         self.model_name = model_name
         self.index_save_path = index_save_path
         self.vectorstore = None
-        self.saved = False
         self.saved_manifest = None
         self.received_manifest = None
 
@@ -62,9 +61,6 @@ class FakeIndexConstructionModule:
     def build_vector_index(self, chunks):
         self.vectorstore = FakeVectorStore(chunks)
         return self.vectorstore
-
-    def save_index(self):
-        self.saved = True
 
     def save_manifest(self, manifest):
         self.saved_manifest = manifest
@@ -104,7 +100,6 @@ def test_campus_rag_system_runs_end_to_end_without_network(monkeypatch):
 
     assert answer.startswith("answer:学生请假超过三天需要谁审批？:")
     assert "学生请假管理办法" in answer
-    assert system.index_module.saved is True
     assert system.index_module.saved_manifest["chunk_count"] > 0
     assert system.index_module.received_manifest["source_document_count"] >= 1
     assert system.retrieval_module.candidate_k == 4
@@ -194,7 +189,7 @@ def test_ask_question_uses_context_window_documents_for_generation():
                 "doc_category": "校园生活",
                 "department": "学生处",
                 "file_type": "md",
-                "source": "data/campus/life/dorm/宿舍晚归登记说明.md",
+                "source": "data/knowledge_base/campus/life/dorm/宿舍晚归登记说明.md",
                 "doc_type": "context",
                 "context_window_size": 2,
                 "context_chunk_indices": [0, 1, 2],
@@ -315,7 +310,7 @@ def test_aligned_sources_keep_all_chunks_with_parent_doc_source_ids():
                 "doc_category": "规章制度",
                 "department": "学生处",
                 "file_type": "md",
-                "source": "data/campus/regulations/student_affairs/学生请假管理办法.md",
+                "source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
             },
         ),
         Document(
@@ -326,7 +321,7 @@ def test_aligned_sources_keep_all_chunks_with_parent_doc_source_ids():
                 "doc_category": "教务教学",
                 "department": "教务处",
                 "file_type": "txt",
-                "source": "data/campus/teaching/exams/期末考试安排.txt",
+                "source": "data/knowledge_base/campus/teaching/exams/期末考试安排.txt",
             },
         ),
     ]

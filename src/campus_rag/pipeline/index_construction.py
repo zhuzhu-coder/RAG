@@ -20,9 +20,9 @@ from .document_ingestion import SUPPORTED_SUFFIXES
 # 创建当前模块的日志记录器
 logger = logging.getLogger(__name__)
 
-# manifest 文件名
+# 索引缓存校验 manifest 文件名
 MANIFEST_FILENAME = "index_manifest.json"
-# manifest 结构版本
+# 索引缓存校验 manifest 结构版本
 MANIFEST_SCHEMA_VERSION = 1
 # 索引类型
 INDEX_TYPE = "Chroma"
@@ -32,7 +32,8 @@ CHROMA_COLLECTION_NAME = "campus_rag_chunks"
 EMBEDDING_DIMENSIONS = 1024
 # embedding 请求超时时间，避免网络异常时长时间挂起
 EMBEDDING_TIMEOUT_SECONDS = 30
-# manifest 对比键
+# 判断 Chroma 本地缓存是否可复用的核心 manifest 字段。
+# source_document_count、chunk_count、created_at 仅用于诊断展示，不参与缓存命中判断。
 MANIFEST_COMPARE_KEYS = [
     "schema_version", # manifest 结构版本
     "index_type", # 索引类型
@@ -40,7 +41,6 @@ MANIFEST_COMPARE_KEYS = [
     "embedding_dimensions", # 向量维度
     "chunking", # 分块配置
     "source_fingerprint", # 源文件指纹
-    "source_document_count", # 源文件文档数量
 ]
 
 
@@ -91,7 +91,7 @@ class IndexConstructionModule:
 
     def build_manifest(self, data_path: str, chunks: Optional[List[Document]] = None) -> Dict[str, Any]:
         """
-        根据当前源数据和索引配置构建 manifest，用于判断本地索引是否过期
+        构建索引缓存校验 manifest，用于判断 Chroma 本地缓存是否可复用
         Args:
             data_path: 校园文档数据目录
             chunks: 可选的分块结果；重建索引后用于记录 chunk_count
@@ -113,11 +113,11 @@ class IndexConstructionModule:
             "chunking": CHUNKING_CONFIG,
             # 源文件指纹
             "source_fingerprint": self._fingerprint_source_records(source_records),
-            # 源文件文档数量
+            # 源文件文档数量，仅用于诊断展示
             "source_document_count": len(source_records),
-            # 分块数量
+            # 分块数量，仅用于诊断展示
             "chunk_count": len(chunks) if chunks is not None else None,
-            # 创建时间
+            # 创建时间，仅用于诊断展示
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -141,7 +141,7 @@ class IndexConstructionModule:
 
     def save_manifest(self, manifest: Dict[str, Any]):
         """
-        保存索引 manifest 到索引目录
+        保存索引缓存校验 manifest 到 Chroma 持久化目录
         Args:
             manifest: 要保存的 manifest 字典
         """
@@ -150,7 +150,7 @@ class IndexConstructionModule:
         with open(manifest_path, "w", encoding="utf-8") as f:
             # 保存 manifest 到文件，保留中文，缩进 2 个空格
             json.dump(manifest, f, ensure_ascii=False, indent=2)
-        logger.info(f"索引 manifest 已保存到: {manifest_path}")
+        logger.info(f"索引缓存校验 manifest 已保存到: {manifest_path}")
 
     def manifest_matches(self, expected_manifest: Dict[str, Any]) -> bool:
         """
@@ -164,12 +164,12 @@ class IndexConstructionModule:
         actual_manifest = self.load_manifest()
         if not actual_manifest:
             return False
-        # 比较 manifest 中的每个字段是否匹配
+        # 比较会影响向量缓存正确性的核心字段是否匹配
         for key in MANIFEST_COMPARE_KEYS:
             # 如果本地 manifest 中没有该字段，或与预期 manifest 中的字段值不匹配
             if actual_manifest.get(key) != expected_manifest.get(key):
                 logger.info(
-                    "索引 manifest 不匹配: %s, actual=%s, expected=%s",
+                    "索引缓存校验 manifest 不匹配: %s, actual=%s, expected=%s",
                     key,
                     actual_manifest.get(key),
                     expected_manifest.get(key),
@@ -243,7 +243,7 @@ class IndexConstructionModule:
             return None
         
         if expected_manifest is not None and not self.manifest_matches(expected_manifest):
-            logger.info("索引 manifest 缺失或已过期，将构建新索引")
+            logger.info("索引缓存校验 manifest 缺失或已过期，将重建 Chroma collection")
             return None
 
         try:
@@ -273,13 +273,15 @@ class IndexConstructionModule:
             raise ValueError("文档块列表不能为空")
         
         Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
-        # 构建 Chroma 向量存储；重建时清空 collection，避免旧向量混入新索引
+        # 构建 Chroma 向量存储
         self.vectorstore = Chroma(
             collection_name=CHROMA_COLLECTION_NAME,
             embedding_function=self.embeddings,
             persist_directory=self.index_save_path,
         )
+        # 清空 collection，避免历史向量混入新索引
         self.vectorstore.reset_collection()
+        # 添加文档块到索引
         self.vectorstore.add_documents(chunks, ids=self._chunk_ids(chunks))
         
         logger.info(f"向量索引构建完成，包含 {len(chunks)} 个向量")
@@ -298,21 +300,9 @@ class IndexConstructionModule:
         self.vectorstore.add_documents(new_chunks, ids=self._chunk_ids(new_chunks))
         logger.info("新文档块添加完成")
 
-    def save_index(self):
-        """
-        保存向量索引到配置的路径
-        """
-        if not self.vectorstore:
-            raise ValueError("请先构建向量索引")
-
-        # 确保保存目录存在
-        Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
-        # Chroma 使用 persist_directory 自动持久化，这里保留显式入口便于编排层调用
-        logger.info(f"向量索引已保存到: {self.index_save_path}")
-
     @staticmethod
     def _chunk_ids(chunks: List[Document]) -> List[str]:
-        """提取稳定的 Chroma 文档 ID。"""
+        """提取稳定的 Chroma 文档 ID"""
         ids = []
         for position, chunk in enumerate(chunks):
             metadata = chunk.metadata or {}

@@ -15,9 +15,9 @@ def test_load_documents_returns_supported_file_types():
 
 
 def test_infer_doc_category_uses_path_only():
-    assert infer_doc_category(Path("data/campus/teaching/exams/sample.txt")) == "教务教学"
-    assert infer_doc_category(Path("data/campus/life/dormitory/sample.txt")) == "校园生活"
-    assert infer_doc_category(Path("data/campus/unknown/sample.txt")) == "其他"
+    assert infer_doc_category(Path("data/knowledge_base/campus/teaching/exams/sample.txt")) == "教务教学"
+    assert infer_doc_category(Path("data/knowledge_base/campus/life/dormitory/sample.txt")) == "校园生活"
+    assert infer_doc_category(Path("data/knowledge_base/campus/unknown/sample.txt")) == "其他"
 
 
 def test_load_documents_can_read_utf16_text(tmp_path):

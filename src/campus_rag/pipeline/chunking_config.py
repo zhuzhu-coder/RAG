@@ -7,10 +7,10 @@ from typing import Any, Dict, List
 # 通用中文文本递归切分分隔符
 TEXT_SEPARATORS: List[str] = ["\n\n", "\n", "。", "；", ";", "，", ",", " ", ""]
 
-# Markdown 标题层级配置，使用 JSON 友好的列表，便于写入 manifest
+# Markdown 标题层级配置，使用 JSON 友好的列表，便于写入缓存校验 manifest
 MARKDOWN_HEADERS_TO_SPLIT_ON: List[List[str]] = [["#", "h1"], ["##", "h2"], ["###", "h3"]]
 
-# 数据准备和索引 manifest 共用的分块配置
+# 数据准备和索引缓存校验 manifest 共用的分块配置
 CHUNKING_CONFIG: Dict[str, Dict[str, Any]] = {
     "md": {
         "splitter": "MarkdownHeaderTextSplitter",  # 按 Markdown 标题切分

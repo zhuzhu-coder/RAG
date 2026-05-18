@@ -88,7 +88,7 @@ class FakeRAGSystem:
                     department="学生处",
                     file_type="md",
                     section="请假审批",
-                    source="data/campus/regulations/student_affairs/学生请假管理办法.md",
+                    source="data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
                     page=None,
                     chunk_index=0,
                     rrf_score=0.03,

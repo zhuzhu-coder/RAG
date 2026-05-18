@@ -16,7 +16,7 @@ def _chunk(parent_id, chunk_index, content):
             "doc_category": "校园生活",
             "department": "学生处",
             "file_type": "md",
-            "source": "data/campus/life/dorm/宿舍晚归登记说明.md",
+            "source": "data/knowledge_base/campus/life/dorm/宿舍晚归登记说明.md",
             "section": f"第{chunk_index}段",
         },
     )
@@ -51,7 +51,7 @@ def test_normalize_parent_metadata_does_not_add_parent_section():
     parent_doc = Document(
         page_content="学生请假管理办法",
         metadata={
-            "source": "data/campus/regulations/student_affairs/leave.md",
+            "source": "data/knowledge_base/campus/regulations/student_affairs/leave.md",
             "relative_path": "regulations/student_affairs/leave.md",
             "doc_title": "学生请假管理办法",
             "doc_id": "stable-parent-id",
@@ -106,7 +106,7 @@ def test_get_context_documents_backfills_neighbor_chunks_and_parent_metadata():
             "doc_category": "校园生活",
             "department": "学生处",
             "file_type": "md",
-            "source": "data/campus/life/dorm/宿舍晚归登记说明.md",
+            "source": "data/knowledge_base/campus/life/dorm/宿舍晚归登记说明.md",
             "doc_type": "parent",
         },
     )

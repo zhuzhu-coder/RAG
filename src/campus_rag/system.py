@@ -20,7 +20,7 @@ from .pipeline import (
 )
 
 def _load_environment(project_root: Path = PROJECT_ROOT) -> None:
-    """加载环境变量，只读取项目根目录或当前目录的 .env。"""
+    """加载环境变量，只读取项目根目录或当前目录的 .env"""
     project_env = project_root / ".env"
     if project_env.exists():
         load_dotenv(project_env)
@@ -64,7 +64,7 @@ class CampusRAGSystem:
         # 回答生成模块
         self.generation_module = None
 
-        # 检查数据路径是否存在；如果环境变量还指向旧路径，自动回退到校园知识库目录
+        # 检查数据路径是否存在；如果配置路径不可用，尝试回退到默认校园知识库目录
         data_path = Path(self.config.data_path)
         if not data_path.exists():
             campus_data_path = PROJECT_ROOT / "data" / "knowledge_base" / "campus"
@@ -107,9 +107,9 @@ class CampusRAGSystem:
         """构建知识库"""
         print("\n正在构建知识库...")
 
-        # 1. 用源文件指纹和索引配置判断本地向量索引是否仍然可用
+        # 1. 用源文件指纹和索引配置判断 Chroma 本地缓存是否仍然可用
         print("检查向量索引缓存...")
-        # 构建预期的 manifest
+        # 构建预期的缓存校验 manifest
         expected_manifest = self.index_module.build_manifest(self.config.data_path)
         # 加载索引
         vectorstore = self.index_module.load_index(expected_manifest)
@@ -129,9 +129,8 @@ class CampusRAGSystem:
             print("构建向量索引...")
             vectorstore = self.index_module.build_vector_index(chunks)
 
-            # 4. 保存索引与 manifest
-            print("保存向量索引...")
-            self.index_module.save_index()
+            # 4. 保存索引缓存校验元数据；Chroma 会通过 persist_directory 自动持久化
+            print("保存索引缓存元数据...")
             self.index_module.save_manifest(
                 self.index_module.build_manifest(self.config.data_path, chunks)
             )

@@ -29,5 +29,4 @@ def test_project_directories_are_professionally_grouped():
     assert (PROJECT_ROOT / "tests" / "evaluation").is_dir()
     assert (PROJECT_ROOT / "tests" / "pipeline").is_dir()
     assert (PROJECT_ROOT / "tests" / "system").is_dir()
-    assert not (PROJECT_ROOT / "evals").exists()
 

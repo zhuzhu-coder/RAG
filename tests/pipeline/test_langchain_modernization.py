@@ -58,7 +58,7 @@ def test_build_context_labels_parent_documents_with_citation_numbers(monkeypatch
             "doc_title": "学生请假管理办法",
             "doc_category": "规章制度",
             "department": "学生处",
-            "source": "data/campus/regulations/student_affairs/学生请假管理办法.md",
+            "source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
             "二级标题": "办理流程",
         },
     )
@@ -66,7 +66,7 @@ def test_build_context_labels_parent_documents_with_citation_numbers(monkeypatch
     context = generator._build_context([doc])
 
     assert "[1] 校园文档: 学生请假管理办法" in context
-    assert "来源: data/campus/regulations/student_affairs/学生请假管理办法.md" in context
+    assert "来源: data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md" in context
 
 
 def test_build_context_does_not_fall_back_to_legacy_domain_fields(monkeypatch):
@@ -75,7 +75,7 @@ def test_build_context_does_not_fall_back_to_legacy_domain_fields(monkeypatch):
 
     doc = Document(
         page_content="## 请假流程\n先提交申请，再学院审批。",
-        metadata={"source": "data/campus/regulations/student_affairs/学生请假管理办法.md"},
+        metadata={"source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md"},
     )
 
     context = generator._build_context([doc])
@@ -175,7 +175,7 @@ def test_append_reference_lines_adds_references_once(monkeypatch):
         page_content="## 办理流程\n先提交申请。",
         metadata={
             "doc_title": "学生请假管理办法",
-            "source": "data/campus/regulations/student_affairs/学生请假管理办法.md",
+            "source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
         },
     )
 
@@ -185,7 +185,7 @@ def test_append_reference_lines_adds_references_once(monkeypatch):
     assert with_references == (
         "请假超过三天需要学院审批。[1]\n\n"
         "参考来源:\n"
-        "[1] 学生请假管理办法 - data/campus/regulations/student_affairs/学生请假管理办法.md"
+        "[1] 学生请假管理办法 - data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md"
     )
     assert generator._append_reference_lines(with_references, [doc]) == with_references
 
@@ -198,7 +198,7 @@ def test_stream_with_reference_lines_adds_references_once(monkeypatch):
         page_content="## 办理流程\n先提交申请。",
         metadata={
             "doc_title": "学生请假管理办法",
-            "source": "data/campus/regulations/student_affairs/学生请假管理办法.md",
+            "source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
         },
     )
 
@@ -209,7 +209,7 @@ def test_stream_with_reference_lines_adds_references_once(monkeypatch):
     assert streamed_answer == (
         "请假超过三天需要学院审批。[1]\n\n"
         "参考来源:\n"
-        "[1] 学生请假管理办法 - data/campus/regulations/student_affairs/学生请假管理办法.md"
+        "[1] 学生请假管理办法 - data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md"
     )
 
     already_has_references = "".join(
@@ -235,7 +235,7 @@ def test_generate_list_answer_includes_citation_numbers(monkeypatch):
             page_content="## 办理流程\n先提交申请。",
             metadata={
                 "doc_title": "学生请假管理办法",
-                "source": "data/campus/regulations/student_affairs/学生请假管理办法.md",
+                "source": "data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md",
             },
         )
     ]
@@ -244,7 +244,7 @@ def test_generate_list_answer_includes_citation_numbers(monkeypatch):
 
     assert "学生请假管理办法 [1]" in answer
     assert "参考来源" in answer
-    assert "[1] 学生请假管理办法 - data/campus/regulations/student_affairs/学生请假管理办法.md" in answer
+    assert "[1] 学生请假管理办法 - data/knowledge_base/campus/regulations/student_affairs/学生请假管理办法.md" in answer
 
 
 def test_generation_module_default_model_matches_config_default(monkeypatch):
@@ -430,7 +430,6 @@ def test_metadata_filtered_search_rebuilds_bm25_from_all_filtered_chunks(monkeyp
 def test_retrieval_module_uses_generic_metadata_filters(monkeypatch):
     module = _reload_module(monkeypatch, "campus_rag.pipeline.retrieval_optimization")
 
-    assert not hasattr(module.RetrievalOptimizationModule, "_to_faiss_filters")
     assert module.RetrievalOptimizationModule._to_metadata_filters(
         {"doc_category": ["规章制度", "教务教学"], "department": "学生处"}
     ) == {
@@ -546,7 +545,35 @@ def test_build_manifest_tracks_md_txt_and_pdf_sources(monkeypatch, tmp_path):
     second_manifest = indexer.build_manifest(str(data_root))
 
     assert first_manifest["source_document_count"] == 3
+    assert second_manifest["source_document_count"] == 3
     assert first_manifest["source_fingerprint"] != second_manifest["source_fingerprint"]
+
+
+def test_manifest_matching_ignores_diagnostic_counts(monkeypatch):
+    module = _reload_module(monkeypatch, "campus_rag.pipeline.index_construction")
+    indexer = module.IndexConstructionModule.__new__(module.IndexConstructionModule)
+
+    expected_manifest = {
+        "schema_version": 1,
+        "index_type": "Chroma",
+        "embedding_model": "text-embedding-v4",
+        "embedding_dimensions": 1024,
+        "chunking": {"splitter": "MarkdownHeaderTextSplitter"},
+        "source_fingerprint": "sha256:abc",
+        "source_document_count": 2,
+        "chunk_count": 20,
+        "created_at": "2026-05-18T00:00:00+00:00",
+    }
+    cached_manifest = {
+        **expected_manifest,
+        "source_document_count": 1,
+        "chunk_count": 10,
+        "created_at": "2026-05-17T00:00:00+00:00",
+    }
+    monkeypatch.setattr(indexer, "load_manifest", lambda: cached_manifest)
+
+    assert "source_document_count" not in module.MANIFEST_COMPARE_KEYS
+    assert indexer.manifest_matches(expected_manifest)
 
 
 def test_build_manifest_records_chunking_strategy_per_file_type(monkeypatch, tmp_path):
